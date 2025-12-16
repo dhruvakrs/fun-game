@@ -63,5 +63,6 @@ export default async function handler(req: Request): Promise<Response> {
 }
 
 export const config = {
-  runtime: 'edge',
+  runtime: 'nodejs18.x',
+  regions: ['iad1'],
 }
