@@ -392,7 +392,7 @@ function startOnlineGuest(roomCode: string) {
       setConnectionInfo(`Connected · waiting for host state (${roomCode})`),
     onState: (snapshot) => applyRemoteState(snapshot),
     onError: (err) =>
-      setConnectionInfo(`Connection error: ${err.message ?? 'unknown'}`),
+      handleJoinError(err instanceof Error ? err.message : 'unknown error'),
   })
   setupPlayers()
   level.resetRunState()
@@ -402,8 +402,8 @@ function startOnlineGuest(roomCode: string) {
     .startGuest()
     .catch(
       (err) =>
-        setConnectionInfo(
-          `Join failed: ${err instanceof Error ? err.message : String(err)}`,
+        handleJoinError(
+          err instanceof Error ? err.message : String(err),
         ),
     )
 }
@@ -553,6 +553,15 @@ function getPlayerTwoProfile() {
 
 function createRoomCode() {
   return Math.random().toString(36).slice(2, 6).toUpperCase()
+}
+
+function handleJoinError(message: string) {
+  waitingForHost = false
+  sessionMode = 'local'
+  netSession = null
+  activeRoomCode = null
+  state.status = 'start'
+  setConnectionInfo(`Join failed: ${message}. Back to local start.`)
 }
 
 function setupPlayers(p2Input?: InputProfile) {
