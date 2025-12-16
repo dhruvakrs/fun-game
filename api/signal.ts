@@ -27,7 +27,7 @@ export default async function handler(req: Request): Promise<Response> {
     })
   }
 
-  const url = new URL(req.url)
+  const url = new URL(req.url, 'http://localhost')
   const room = url.searchParams.get('room') ?? ''
   const peer = url.searchParams.get('peer') ?? ''
 
