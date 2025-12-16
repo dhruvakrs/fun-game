@@ -66,14 +66,18 @@ export default async function handler(req: Request): Promise<Response> {
 
   if (req.method === 'GET') {
     const rawList =
-      ((await redis.lrange<string>(roomKey(room), 0, -1)) ?? []) as string[]
+      ((await redis.lrange<string | SignalMessage>(roomKey(room), 0, -1)) ??
+        []) as Array<string | SignalMessage>
     const parsed = rawList
       .map((item) => {
-        try {
-          return JSON.parse(item) as SignalMessage
-        } catch {
-          return null
+        if (typeof item === 'string') {
+          try {
+            return JSON.parse(item) as SignalMessage
+          } catch {
+            return null
+          }
         }
+        return item as SignalMessage
       })
       .filter((m): m is SignalMessage => Boolean(m))
 
