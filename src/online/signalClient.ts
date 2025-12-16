@@ -17,11 +17,14 @@ export class SignalClient {
   }
 
   async post(message: SignalPostBody) {
-    await fetch(this.baseUrl, {
+    const res = await fetch(this.baseUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(message),
     })
+    if (!res.ok) {
+      throw new Error(`Signal post failed: ${res.status}`)
+    }
   }
 
   async fetchMessages() {

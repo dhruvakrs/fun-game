@@ -17,6 +17,21 @@ const getStore = (): Store => {
 }
 
 export default async function handler(req: Request): Promise<Response> {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type': 'application/json',
+  }
+
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    })
+  }
+
   const url = new URL(req.url)
   const room = url.searchParams.get('room') ?? ''
   const peer = url.searchParams.get('peer') ?? ''
@@ -24,6 +39,7 @@ export default async function handler(req: Request): Promise<Response> {
   if (!room) {
     return new Response(JSON.stringify({ error: 'missing room' }), {
       status: 400,
+      headers: corsHeaders,
     })
   }
 
@@ -32,6 +48,7 @@ export default async function handler(req: Request): Promise<Response> {
     if (!body.type || !body.from) {
       return new Response(JSON.stringify({ error: 'invalid body' }), {
         status: 400,
+        headers: corsHeaders,
       })
     }
     const store = getStore()
@@ -43,7 +60,9 @@ export default async function handler(req: Request): Promise<Response> {
       data: body.data,
     })
     store.set(room, existing.slice(-64)) // keep last 64 messages
-    return new Response(JSON.stringify({ ok: true }))
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: corsHeaders,
+    })
   }
 
   if (req.method === 'GET') {
@@ -55,11 +74,14 @@ export default async function handler(req: Request): Promise<Response> {
       all.filter((m) => m.from === peer),
     )
     return new Response(JSON.stringify({ messages }), {
-      headers: { 'content-type': 'application/json' },
+      headers: corsHeaders,
     })
   }
 
-  return new Response('Method Not Allowed', { status: 405 })
+  return new Response('Method Not Allowed', {
+    status: 405,
+    headers: corsHeaders,
+  })
 }
 
 export const config = {
