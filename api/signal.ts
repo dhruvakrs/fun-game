@@ -61,3 +61,7 @@ export default async function handler(req: Request): Promise<Response> {
 
   return new Response('Method Not Allowed', { status: 405 })
 }
+
+export const config = {
+  runtime: 'edge',
+}
