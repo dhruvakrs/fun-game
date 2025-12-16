@@ -113,18 +113,6 @@ export class Level {
       ctx.fill()
     })
 
-    this.coins.forEach((coin) => {
-      if (coin.collected) return
-      const radius = coin.width / 2
-      ctx.fillStyle = '#ffd166'
-      ctx.beginPath()
-      ctx.arc(coin.x + radius, coin.y + radius, radius, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.strokeStyle = '#ffef9f'
-      ctx.lineWidth = 2
-      ctx.stroke()
-    })
-
     if (this.goal) {
       ctx.fillStyle = '#65d6ff'
       ctx.fillRect(this.goal.x, this.goal.y, 4, this.goal.height)

@@ -8,6 +8,7 @@ import { Level } from './game/level'
 import { Player } from './game/entities/player'
 import { GameConfig } from './game/config'
 import { drawPlayer } from './game/render/playerSprite'
+import { drawCoin } from './game/render/coinSprite'
 import { UIManager } from './game/ui/uiManager'
 
 class SoundFX {
@@ -147,6 +148,10 @@ const loop = new GameLoop({
     ctx.translate(-camera.x, 0)
 
     level.draw(ctx)
+    level.coins.forEach((coin) => {
+      if (coin.collected) return
+      drawCoin(ctx, coin, elapsed)
+    })
     drawPlayer(ctx, player, elapsed)
 
     ctx.restore()
