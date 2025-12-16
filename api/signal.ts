@@ -9,7 +9,7 @@ type SignalMessage = {
 
 const ROOM_TTL_SECONDS = 60 * 30 // 30 minutes
 const MAX_MESSAGES = 128
-const redis = Redis.fromEnv()
+const redis = createRedisClient()
 
 export default async function handler(req: Request): Promise<Response> {
   const corsHeaders = {
@@ -111,4 +111,13 @@ export const config = {
 
 function roomKey(room: string) {
   return `signal:room:${room}`
+}
+
+function createRedisClient() {
+  const url = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim()
+  const token = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
+  if (!url || !token) {
+    throw new Error('Missing Upstash Redis configuration')
+  }
+  return new Redis({ url, token })
 }
