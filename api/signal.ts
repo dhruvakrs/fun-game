@@ -1,3 +1,5 @@
+import { kv } from '@vercel/kv'
+
 type SignalMessage = {
   room: string
   from: string
@@ -5,16 +7,8 @@ type SignalMessage = {
   data: unknown
 }
 
-type Store = Map<string, SignalMessage[]>
-
-// In-memory, best-effort store. Suitable for demos on Vercel or local dev.
-const getStore = (): Store => {
-  const g = globalThis as unknown as { __signalStore?: Store }
-  if (!g.__signalStore) {
-    g.__signalStore = new Map()
-  }
-  return g.__signalStore
-}
+const ROOM_TTL_SECONDS = 60 * 30 // 30 minutes
+const MAX_MESSAGES = 128
 
 export default async function handler(req: Request): Promise<Response> {
   const corsHeaders = {
@@ -51,28 +45,53 @@ export default async function handler(req: Request): Promise<Response> {
         headers: corsHeaders,
       })
     }
-    const store = getStore()
-    const existing = store.get(room) ?? []
-    existing.push({
+
+    const message: SignalMessage = {
       room,
       from: body.from,
       type: body.type,
       data: body.data,
-    })
-    store.set(room, existing.slice(-64)) // keep last 64 messages
+    }
+
+    // Append to the room list and keep it capped
+    await kv.rpush(roomKey(room), JSON.stringify(message))
+    await kv.ltrim(roomKey(room), -MAX_MESSAGES, -1)
+    await kv.expire(roomKey(room), ROOM_TTL_SECONDS)
+
     return new Response(JSON.stringify({ ok: true }), {
       headers: corsHeaders,
     })
   }
 
   if (req.method === 'GET') {
-    const store = getStore()
-    const all = store.get(room) ?? []
-    const messages = all.filter((m) => m.from !== peer)
-    store.set(
-      room,
-      all.filter((m) => m.from === peer),
-    )
+    const rawList = ((await kv.lrange(roomKey(room), 0, -1)) ??
+      []) as string[]
+    const parsed = rawList
+      .map((item) => {
+        try {
+          return JSON.parse(item) as SignalMessage
+        } catch {
+          return null
+        }
+      })
+      .filter((m): m is SignalMessage => Boolean(m))
+
+    // Deliver messages not sent by this peer; keep only messages from this peer
+    const messages = parsed.filter((m) => m.from !== peer)
+    const remaining = parsed.filter((m) => m.from === peer)
+
+    if (messages.length > 0 || remaining.length !== parsed.length) {
+      await kv.del(roomKey(room))
+      if (remaining.length > 0) {
+        await kv.rpush(
+          roomKey(room),
+          ...remaining.map((m) => JSON.stringify(m)),
+        )
+        await kv.ltrim(roomKey(room), -MAX_MESSAGES, -1)
+        await kv.expire(roomKey(room), ROOM_TTL_SECONDS)
+      }
+    }
+
     return new Response(JSON.stringify({ messages }), {
       headers: corsHeaders,
     })
@@ -87,4 +106,8 @@ export default async function handler(req: Request): Promise<Response> {
 export const config = {
   runtime: 'nodejs',
   regions: ['iad1'],
+}
+
+function roomKey(room: string) {
+  return `signal:room:${room}`
 }
