@@ -34,7 +34,8 @@ export class UIManager {
     time: number,
     levelName: string,
     nextLevelName?: string,
+    extra?: string,
   ) {
-    drawScreens(ctx, state, time, levelName, nextLevelName)
+    drawScreens(ctx, state, time, levelName, nextLevelName, extra)
   }
 }

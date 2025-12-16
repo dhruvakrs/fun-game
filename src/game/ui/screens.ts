@@ -6,6 +6,7 @@ export function drawScreens(
   time: number,
   levelName: string,
   nextLevelName?: string,
+  extra?: string,
 ) {
   if (state.status === 'playing') return
 
@@ -35,6 +36,15 @@ export function drawScreens(
   ctx.font = '20px "Segoe UI", sans-serif'
   ctx.fillText(prompt, centerX, centerY + 42)
   ctx.restore()
+
+  if (extra) {
+    ctx.save()
+    ctx.fillStyle = '#9fb7ff'
+    ctx.font = '16px "Segoe UI", sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(extra, centerX, centerY + 72)
+    ctx.restore()
+  }
 }
 
 function drawOverlay(ctx: CanvasRenderingContext2D) {

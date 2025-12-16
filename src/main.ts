@@ -1,7 +1,7 @@
 import './style.css'
-import { MultiCamera } from './engine/multiCamera'
 import { intersects } from './engine/collision'
 import { GameLoop } from './engine/gameLoop'
+import { MultiCamera } from './engine/multiCamera'
 import { Input, type ControlScheme, type InputProfile } from './engine/input'
 import { GameState } from './game/gameState'
 import { Level } from './game/level'
@@ -17,6 +17,8 @@ import { updateBoulders, updateFireBars } from './game/entities/obstacles'
 import { updateEnemies } from './game/entities/enemies'
 import { LEVELS } from './game/levels'
 import { UIManager } from './game/ui/uiManager'
+import type { NetworkState, SessionMode } from './online/types'
+import { NetSession } from './online/netSession'
 
 class SoundFX {
   private ctx: AudioContext | null = null
@@ -78,7 +80,8 @@ app.appendChild(canvas)
 
 const overlay = document.createElement('div')
 overlay.className = 'overlay'
-overlay.innerText = 'Enter: start/next · R: restart · Arrows/A/D: move · Space: jump'
+overlay.innerText =
+  '1/Enter: Local · 2/H: Host Online · 3/J: Join Online · R: restart · Arrows/A/D move · Space jump'
 app.appendChild(overlay)
 
 const context = canvas.getContext('2d')
@@ -119,6 +122,15 @@ const state = new GameState()
 const sound = new SoundFX()
 const ui = new UIManager()
 let elapsed = 0
+let sessionMode: SessionMode = 'local'
+let netSession: NetSession | null = null
+let remoteState: NetworkState | null = null
+let connectionInfo = 'Local co-op'
+const peerId =
+  (typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2, 10)).slice(0, 8)
+const guestInputProfile = input.registerProfile(controlSchemes[0])
 
 setupPlayers()
 
@@ -131,6 +143,9 @@ const loop = new GameLoop({
     const pressedStart =
       input.consumeKey('Enter') || input.consumeKey('NumpadEnter')
     const pressedRestart = input.consumeKey('KeyR')
+    const chooseLocal = pressedStart || input.consumeKey('Digit1')
+    const chooseHost = input.consumeKey('KeyH') || input.consumeKey('Digit2')
+    const chooseJoin = input.consumeKey('KeyJ') || input.consumeKey('Digit3')
 
     if (pressedRestart) {
       switchLevel(currentLevelIndex, true)
@@ -138,8 +153,15 @@ const loop = new GameLoop({
     }
 
     if (state.status === 'start') {
-      if (pressedStart) {
-        switchLevel(currentLevelIndex, true)
+      if (chooseLocal) {
+        startLocal()
+      } else if (chooseHost) {
+        startOnlineHost()
+      } else if (chooseJoin) {
+        const code = window.prompt('Enter room code from host:')
+        if (code) {
+          startOnlineGuest(code.trim())
+        }
       }
       return
     }
