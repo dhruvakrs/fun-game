@@ -127,6 +127,7 @@ let netSession: NetSession | null = null
 let connectionInfo = 'Local co-op'
 let remoteInputProfile: InputProfile | null = null
 let activeRoomCode: string | null = null
+let waitingForHost = false
 const peerId =
   (typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
@@ -147,9 +148,11 @@ const loop = new GameLoop({
     const pressedStart =
       input.consumeKey('Enter') || input.consumeKey('NumpadEnter')
     const pressedRestart = input.consumeKey('KeyR')
+    const pressedCancel = input.consumeKey('Escape')
     const chooseLocal = pressedStart || input.consumeKey('Digit1')
     const chooseHost = input.consumeKey('KeyH') || input.consumeKey('Digit2')
     const chooseJoin = input.consumeKey('KeyJ') || input.consumeKey('Digit3')
+    const waitingGuest = sessionMode === 'online-guest' && waitingForHost
 
     if (pressedRestart && !isGuest) {
       switchLevel(currentLevelIndex, true)
@@ -158,6 +161,14 @@ const loop = new GameLoop({
     }
 
     if (state.status === 'start') {
+      if (sessionMode === 'online-guest' && (pressedRestart || pressedCancel)) {
+        startLocal()
+        return
+      }
+      if (waitingGuest) {
+        // Keep waiting for host snapshot; allow cancel via Esc/R above.
+        return
+      }
       if (chooseLocal) {
         startLocal()
       } else if (chooseHost) {
@@ -187,6 +198,10 @@ const loop = new GameLoop({
     }
 
     if (isGuest) {
+      if (pressedRestart || pressedCancel) {
+        startLocal()
+        return
+      }
       sendGuestInput()
       followCamera(delta)
       return
@@ -327,6 +342,7 @@ loop.start()
 function startLocal() {
   sessionMode = 'local'
   connectionInfo = 'Local co-op'
+  waitingForHost = false
   remoteInputProfile = null
   activeRoomCode = null
   netSession = null
@@ -338,6 +354,7 @@ function startOnlineHost() {
   sessionMode = 'online-host'
   activeRoomCode = createRoomCode()
   connectionInfo = `Hosting room ${activeRoomCode}`
+  waitingForHost = false
   netSession = new NetSession(activeRoomCode, peerId, sessionMode, {
     onConnected: () =>
       (connectionInfo = `Guest connected · room ${activeRoomCode}`),
@@ -359,16 +376,19 @@ function startOnlineHost() {
 function startOnlineGuest(roomCode: string) {
   sessionMode = 'online-guest'
   activeRoomCode = roomCode
-  connectionInfo = `Joining room ${roomCode}...`
+  waitingForHost = true
+  connectionInfo = `Joining room ${roomCode}... (Esc to cancel)`
   netSession = new NetSession(roomCode, peerId, sessionMode, {
     onConnected: () =>
-      (connectionInfo = `Connected to host · room ${roomCode}`),
+      (connectionInfo = `Connected · waiting for host state (${roomCode})`),
     onState: (snapshot) => applyRemoteState(snapshot),
     onError: (err) =>
       (connectionInfo = `Connection error: ${err.message ?? 'unknown'}`),
   })
   setupPlayers()
-  state.continueRun(currentLevelIndex, PLAYER_COUNT)
+  level.resetRunState()
+  state.status = 'start'
+  state.level = currentLevelIndex + 1
   void netSession
     .startGuest()
     .catch(
@@ -445,6 +465,7 @@ function applyRemoteState(snapshot: NetworkState) {
   if (levelChanged) {
     adoptRemoteLevel(snapshot.levelIndex)
   }
+  waitingForHost = false
   state.status = snapshot.status as GameStatus
   state.level = snapshot.levelIndex + 1
   state.score = snapshot.score
@@ -507,6 +528,7 @@ function adoptRemoteLevel(index: number) {
   level = new Level(levelDefs[currentLevelIndex])
   setupPlayers()
   camera = new MultiCamera(canvas.width, level.width)
+  waitingForHost = false
 }
 
 function getPlayerTwoProfile() {
