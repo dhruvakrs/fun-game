@@ -5,12 +5,19 @@ export class GameState {
   score = 0
   coins = 0
   lives = GameConfig.startingLives
+  level = 1
 
-  startRun() {
+  startRun(levelIndex = 0) {
     this.status = 'playing'
     this.score = 0
     this.coins = 0
     this.lives = GameConfig.startingLives
+    this.level = levelIndex + 1
+  }
+
+  continueRun(levelIndex: number) {
+    this.status = 'playing'
+    this.level = levelIndex + 1
   }
 
   addCoin() {

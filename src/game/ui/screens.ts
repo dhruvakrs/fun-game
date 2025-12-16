@@ -4,13 +4,15 @@ export function drawScreens(
   ctx: CanvasRenderingContext2D,
   state: GameState,
   time: number,
+  levelName: string,
+  nextLevelName?: string,
 ) {
   if (state.status === 'playing') return
 
   drawPattern(ctx, time)
   drawOverlay(ctx)
 
-  const { title, subtitle, prompt } = getCopy(state)
+  const { title, subtitle, prompt } = getCopy(state, levelName, nextLevelName)
   const centerX = ctx.canvas.width / 2
   const centerY = ctx.canvas.height / 2
 
@@ -74,19 +76,28 @@ function drawPattern(ctx: CanvasRenderingContext2D, time: number) {
   ctx.restore()
 }
 
-function getCopy(state: GameState) {
+function getCopy(
+  state: GameState,
+  levelName: string,
+  nextLevelName?: string,
+) {
   if (state.status === 'start') {
     return {
       title: 'Princess Plumber',
-      subtitle: 'Leap, collect, and reach the flag!',
+      subtitle: `Level ${state.level}: ${levelName}`,
       prompt: 'Press Enter to Start',
     }
   }
   if (state.status === 'complete') {
+    const prompt = nextLevelName
+      ? `Press Enter for ${nextLevelName}`
+      : 'Press Enter to Restart'
     return {
       title: 'Level Complete!',
-      subtitle: 'Nice run — grab more coins next time',
-      prompt: 'Press R to Restart',
+      subtitle: nextLevelName
+        ? `Next: ${nextLevelName}`
+        : 'Nice run — grab more coins next time',
+      prompt,
     }
   }
 

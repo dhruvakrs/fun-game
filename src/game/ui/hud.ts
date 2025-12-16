@@ -8,6 +8,7 @@ export function drawHud(
   ctx: CanvasRenderingContext2D,
   state: GameState,
   time: number,
+  levelLabel: string,
 ) {
   const width = ctx.canvas.width - 28
   const x = (ctx.canvas.width - width) / 2
@@ -29,6 +30,13 @@ export function drawHud(
   ctx.strokeStyle = '#3fd2ff'
   ctx.lineWidth = 2
   ctx.stroke()
+  ctx.restore()
+
+  ctx.save()
+  ctx.fillStyle = '#8ff1d1'
+  ctx.font = '14px "Segoe UI Semibold", sans-serif'
+  ctx.textAlign = 'left'
+  ctx.fillText(levelLabel.toUpperCase(), x + 16, y + 20)
   ctx.restore()
 
   const padding = 18

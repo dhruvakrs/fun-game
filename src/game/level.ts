@@ -1,113 +1,58 @@
 import {
   type Boulder,
-  type BoulderDef,
   type BouncePad,
   type Coin,
   type Enemy,
-  type EnemyDef,
   type FireBar,
-  type FireBarDef,
   type Goal,
   type Hazard,
   type Rect,
 } from './entities/types'
-import { spawnBoulder, spawnFireBar } from './entities/obstacles'
+import {
+  fireBarHits,
+  spawnBoulder,
+  spawnFireBar,
+} from './entities/obstacles'
 import { resetEnemies } from './entities/enemies'
+import type { CoinTrail, LevelDefinition } from './levels'
 
 type SolidTile = Rect & { kind: 'ground' | 'platform' }
 
 const TILE_SIZE = 32
 const LEVEL_WIDTH = 64
 
-const rawRows = [
-  '................................................................',
-  '................................................................',
-  '...............==..C.....................==....................',
-  '..........................==.........................C.........',
-  '............==........C.........==.............................',
-  '....................==....C..........==........................',
-  '................................................................',
-  '.............====........C............===..................C...',
-  '..............................==...............................',
-  '....===.................................==..........C...........',
-  '...................###.................###......................',
-  '...................###.................###......................',
-  '..........###...............................###.................',
-  '..........###............C..................###.................',
-  'P..................==..............C....B........S.....G.......',
-  '.............S..............==...........S.....................',
-  '################################################################',
-  '################################################################',
-]
-
-const BOULDER_DEFS: BoulderDef[] = [
-  {
-    x: TILE_SIZE * 18,
-    y: TILE_SIZE * 16 - 28,
-    size: 28,
-    speed: 80,
-    range: [TILE_SIZE * 18, TILE_SIZE * 28],
-  },
-]
-
-const FIREBAR_DEFS: FireBarDef[] = [
-  {
-    x: TILE_SIZE * 30,
-    y: TILE_SIZE * 8,
-    length: 88,
-    speed: 2.6,
-    radius: 10,
-  },
-]
-
-const ENEMY_DEFS: EnemyDef[] = [
-  {
-    type: 'turtle',
-    x: TILE_SIZE * 6,
-    y: TILE_SIZE * 16 - 20,
-    range: [TILE_SIZE * 4, TILE_SIZE * 12],
-    speed: 55,
-  },
-  {
-    type: 'slime',
-    x: TILE_SIZE * 20,
-    y: TILE_SIZE * 13 - 18,
-    range: [TILE_SIZE * 18, TILE_SIZE * 23],
-    speed: 40,
-    hopInterval: 1.1,
-  },
-  {
-    type: 'bird',
-    x: TILE_SIZE * 30,
-    y: TILE_SIZE * 7,
-    range: [TILE_SIZE * 25, TILE_SIZE * 34],
-    speed: 70,
-  },
-]
-
-const rows = rawRows.map((row, index) => {
-  if (row.length > LEVEL_WIDTH) {
-    throw new Error(`Row ${index} exceeds level width of ${LEVEL_WIDTH}`)
-  }
-  return row.padEnd(LEVEL_WIDTH, '.')
-})
-
 export class Level {
-  readonly width = LEVEL_WIDTH * TILE_SIZE
-  readonly height = rows.length * TILE_SIZE
+  readonly width: number
+  readonly height: number
   readonly terrain: SolidTile[] = []
   readonly solids: Rect[] = []
   readonly coins: Coin[] = []
   readonly hazards: Hazard[] = []
   readonly bouncePads: BouncePad[] = []
+  readonly name: string
   boulders: Boulder[] = []
   fireBars: FireBar[] = []
   enemies: Enemy[] = []
   goal: Goal | null = null
   spawnPoint = { x: TILE_SIZE * 2, y: TILE_SIZE * 10 }
+  private definition: LevelDefinition
 
-  constructor() {
-    rows.forEach((row, y) => {
+  private rows: string[]
+
+  constructor(definition: LevelDefinition) {
+    this.definition = definition
+    this.name = definition.name
+    this.rows = definition.rows.map((row, index) => {
+      if (row.length > LEVEL_WIDTH) {
+        throw new Error(`Row ${index} exceeds level width of ${LEVEL_WIDTH}`)
+      }
+      return row.padEnd(LEVEL_WIDTH, '.')
+    })
+
+    this.width = LEVEL_WIDTH * TILE_SIZE
+    this.height = this.rows.length * TILE_SIZE
+
+    this.rows.forEach((row, y) => {
       for (let x = 0; x < row.length; x++) {
         const symbol = row[x]
         const worldX = x * TILE_SIZE
@@ -164,6 +109,7 @@ export class Level {
       }
     })
 
+    this.addCoinTrails(definition.coinTrails ?? [])
     this.resetDynamics()
   }
 
@@ -181,9 +127,13 @@ export class Level {
   }
 
   resetDynamics() {
-    this.boulders = BOULDER_DEFS.map((def) => spawnBoulder(def))
-    this.fireBars = FIREBAR_DEFS.map((def) => spawnFireBar(def))
-    resetEnemies(this.enemies, ENEMY_DEFS)
+    this.boulders = (this.definition.boulders ?? []).map((def) =>
+      spawnBoulder(def),
+    )
+    this.fireBars = (this.definition.fireBars ?? []).map((def) =>
+      spawnFireBar(def),
+    )
+    resetEnemies(this.enemies, this.definition.enemies ?? [])
   }
 
   resetRunState() {
@@ -225,4 +175,35 @@ export class Level {
       ctx.fill()
     }
   }
+
+  hitsFireBar(rect: Rect) {
+    return this.fireBars.some((bar) => fireBarHits(bar, rect))
+  }
+
+  private addCoinTrails(trails: CoinTrail[]) {
+    trails.forEach((trail) => {
+      const count = trail.count ?? 5
+      const padding = 8
+      const coinSize = TILE_SIZE - padding
+      for (let i = 0; i < count; i++) {
+        const t = count === 1 ? 0.5 : i / (count - 1)
+        const tileX = lerp(trail.from[0], trail.to[0], t)
+        const tileY = lerp(trail.from[1], trail.to[1], t)
+        const arcOffset = Math.sin(Math.PI * t) * 0.6
+        const worldX = tileX * TILE_SIZE + padding / 2
+        const worldY = (tileY - arcOffset) * TILE_SIZE
+        this.coins.push({
+          x: worldX,
+          y: worldY,
+          width: coinSize,
+          height: coinSize,
+          collected: false,
+        })
+      }
+    })
+  }
+}
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t
 }

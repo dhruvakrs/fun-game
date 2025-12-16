@@ -15,15 +15,26 @@ export class UIManager {
     this.pops = updateScorePops(this.pops, delta)
   }
 
-  renderHud(ctx: CanvasRenderingContext2D, state: GameState, time: number) {
-    drawHud(ctx, state, time)
+  renderHud(
+    ctx: CanvasRenderingContext2D,
+    state: GameState,
+    time: number,
+    levelLabel: string,
+  ) {
+    drawHud(ctx, state, time, levelLabel)
   }
 
   renderScorePops(ctx: CanvasRenderingContext2D, cameraX: number) {
     drawScorePops(ctx, this.pops, cameraX)
   }
 
-  renderScreens(ctx: CanvasRenderingContext2D, state: GameState, time: number) {
-    drawScreens(ctx, state, time)
+  renderScreens(
+    ctx: CanvasRenderingContext2D,
+    state: GameState,
+    time: number,
+    levelName: string,
+    nextLevelName?: string,
+  ) {
+    drawScreens(ctx, state, time, levelName, nextLevelName)
   }
 }

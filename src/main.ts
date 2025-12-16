@@ -14,11 +14,11 @@ import { tickBouncePads } from './game/entities/bouncePad'
 import { drawBoulder, drawFireBar } from './game/render/obstacles'
 import { drawEnemy } from './game/render/enemies'
 import {
-  fireBarHits,
   updateBoulders,
   updateFireBars,
 } from './game/entities/obstacles'
 import { updateEnemies } from './game/entities/enemies'
+import { LEVELS } from './game/levels'
 import { UIManager } from './game/ui/uiManager'
 
 class SoundFX {
@@ -81,7 +81,7 @@ app.appendChild(canvas)
 
 const overlay = document.createElement('div')
 overlay.className = 'overlay'
-overlay.innerText = 'Enter: start · R: restart · Arrows/A/D: move · Space: jump'
+overlay.innerText = 'Enter: start/next · R: restart · Arrows/A/D: move · Space: jump'
 app.appendChild(overlay)
 
 const context = canvas.getContext('2d')
@@ -93,9 +93,11 @@ if (!context) {
 const ctx = context
 
 const input = new Input()
-const level = new Level()
-const player = new Player(level.spawnPoint)
-const camera = new Camera(canvas.width, level.width)
+const levelDefs = LEVELS
+let currentLevelIndex = 0
+let level = new Level(levelDefs[currentLevelIndex])
+let player = new Player(level.spawnPoint)
+let camera = new Camera(canvas.width, level.width)
 const state = new GameState()
 const sound = new SoundFX()
 const ui = new UIManager()
@@ -110,15 +112,24 @@ const loop = new GameLoop({
     const pressedStart = input.consumePress('start')
     const pressedRestart = input.consumePress('restart')
 
+    if (pressedRestart) {
+      switchLevel(currentLevelIndex, true)
+      return
+    }
+
     if (state.status === 'start') {
-      if (pressedStart || pressedRestart) {
-        beginRun()
+      if (pressedStart) {
+        switchLevel(currentLevelIndex, true)
       }
       return
     }
 
-    if (pressedRestart) {
-      beginRun()
+    if (state.status === 'complete') {
+      if (pressedStart) {
+        const hasNext = currentLevelIndex < levelDefs.length - 1
+        const nextIndex = hasNext ? currentLevelIndex + 1 : 0
+        switchLevel(nextIndex, !hasNext)
+      }
       return
     }
 
@@ -152,9 +163,7 @@ const loop = new GameLoop({
     const boulderHit = level.boulders.some((boulder) =>
       intersects(player.body, boulder),
     )
-    const fireHit = level.fireBars.some((bar) =>
-      fireBarHits(bar, player.body),
-    )
+    const fireHit = level.hitsFireBar(player.body)
     const enemyHit = level.enemies.some((enemy) =>
       intersects(player.body, enemy.body),
     )
@@ -205,18 +214,30 @@ const loop = new GameLoop({
     ctx.restore()
 
     ui.renderScorePops(ctx, camera.x)
-    ui.renderHud(ctx, state, elapsed)
-    ui.renderScreens(ctx, state, elapsed)
+    ui.renderHud(ctx, state, elapsed, `Level ${state.level}: ${level.name}`)
+    ui.renderScreens(ctx, state, elapsed, level.name, getNextLevelName())
   },
 })
 
 loop.start()
 
-function beginRun() {
-  state.startRun()
+function beginRun(resetStats: boolean) {
+  if (resetStats) {
+    state.startRun(currentLevelIndex)
+  } else {
+    state.continueRun(currentLevelIndex)
+  }
   level.resetRunState()
   player.reset(level.spawnPoint)
   snapCamera()
+}
+
+function switchLevel(index: number, resetStats: boolean) {
+  currentLevelIndex = index
+  level = new Level(levelDefs[currentLevelIndex])
+  player = new Player(level.spawnPoint)
+  camera = new Camera(canvas.width, level.width)
+  beginRun(resetStats)
 }
 
 function handleHazard() {
@@ -235,4 +256,11 @@ function snapCamera() {
     Math.min(level.width - canvas.width, centerX - canvas.width / 2),
   )
   camera.x = clamped
+}
+
+function getNextLevelName() {
+  if (currentLevelIndex < levelDefs.length - 1) {
+    return levelDefs[currentLevelIndex + 1].name
+  }
+  return undefined
 }
