@@ -1,4 +1,18 @@
-import type { BouncePad, Coin, Goal, Hazard, Rect } from './entities/types'
+import {
+  type Boulder,
+  type BoulderDef,
+  type BouncePad,
+  type Coin,
+  type Enemy,
+  type EnemyDef,
+  type FireBar,
+  type FireBarDef,
+  type Goal,
+  type Hazard,
+  type Rect,
+} from './entities/types'
+import { spawnBoulder, spawnFireBar } from './entities/obstacles'
+import { resetEnemies } from './entities/enemies'
 
 type SolidTile = Rect & { kind: 'ground' | 'platform' }
 
@@ -20,10 +34,55 @@ const rawRows = [
   '...................###.................###......................',
   '..........###...............................###.................',
   '..........###............C..................###.................',
-  'P..................==..............C.............S.....G.......',
+  'P..................==..............C....B........S.....G.......',
   '.............S..............==...........S.....................',
   '################################################################',
   '################################################################',
+]
+
+const BOULDER_DEFS: BoulderDef[] = [
+  {
+    x: TILE_SIZE * 18,
+    y: TILE_SIZE * 16 - 28,
+    size: 28,
+    speed: 80,
+    range: [TILE_SIZE * 18, TILE_SIZE * 28],
+  },
+]
+
+const FIREBAR_DEFS: FireBarDef[] = [
+  {
+    x: TILE_SIZE * 30,
+    y: TILE_SIZE * 8,
+    length: 88,
+    speed: 2.6,
+    radius: 10,
+  },
+]
+
+const ENEMY_DEFS: EnemyDef[] = [
+  {
+    type: 'turtle',
+    x: TILE_SIZE * 6,
+    y: TILE_SIZE * 16 - 20,
+    range: [TILE_SIZE * 4, TILE_SIZE * 12],
+    speed: 55,
+  },
+  {
+    type: 'slime',
+    x: TILE_SIZE * 20,
+    y: TILE_SIZE * 13 - 18,
+    range: [TILE_SIZE * 18, TILE_SIZE * 23],
+    speed: 40,
+    hopInterval: 1.1,
+  },
+  {
+    type: 'bird',
+    x: TILE_SIZE * 30,
+    y: TILE_SIZE * 7,
+    range: [TILE_SIZE * 25, TILE_SIZE * 34],
+    speed: 70,
+  },
 ]
 
 const rows = rawRows.map((row, index) => {
@@ -41,6 +100,9 @@ export class Level {
   readonly coins: Coin[] = []
   readonly hazards: Hazard[] = []
   readonly bouncePads: BouncePad[] = []
+  boulders: Boulder[] = []
+  fireBars: FireBar[] = []
+  enemies: Enemy[] = []
   goal: Goal | null = null
   spawnPoint = { x: TILE_SIZE * 2, y: TILE_SIZE * 10 }
 
@@ -101,6 +163,8 @@ export class Level {
         }
       }
     })
+
+    this.resetDynamics()
   }
 
   resetCoins() {
@@ -114,6 +178,18 @@ export class Level {
       pad.squash = 0
       pad.cooldown = 0
     })
+  }
+
+  resetDynamics() {
+    this.boulders = BOULDER_DEFS.map((def) => spawnBoulder(def))
+    this.fireBars = FIREBAR_DEFS.map((def) => spawnFireBar(def))
+    resetEnemies(this.enemies, ENEMY_DEFS)
+  }
+
+  resetRunState() {
+    this.resetCoins()
+    this.resetBouncePads()
+    this.resetDynamics()
   }
 
   draw(ctx: CanvasRenderingContext2D) {

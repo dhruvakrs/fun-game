@@ -11,6 +11,14 @@ import { drawPlayer } from './game/render/playerSprite'
 import { drawCoin } from './game/render/coinSprite'
 import { drawBouncePad } from './game/render/bouncePad'
 import { tickBouncePads } from './game/entities/bouncePad'
+import { drawBoulder, drawFireBar } from './game/render/obstacles'
+import { drawEnemy } from './game/render/enemies'
+import {
+  fireBarHits,
+  updateBoulders,
+  updateFireBars,
+} from './game/entities/obstacles'
+import { updateEnemies } from './game/entities/enemies'
 import { UIManager } from './game/ui/uiManager'
 
 class SoundFX {
@@ -136,9 +144,22 @@ const loop = new GameLoop({
       sound.bounce()
     }
 
+    updateBoulders(level.boulders, delta)
+    updateFireBars(level.fireBars, delta)
+    updateEnemies(level.enemies, delta)
+
     const spike = level.hazards.some((hazard) => intersects(player.body, hazard))
+    const boulderHit = level.boulders.some((boulder) =>
+      intersects(player.body, boulder),
+    )
+    const fireHit = level.fireBars.some((bar) =>
+      fireBarHits(bar, player.body),
+    )
+    const enemyHit = level.enemies.some((enemy) =>
+      intersects(player.body, enemy.body),
+    )
     const fell = player.body.y > level.height + 200
-    if (spike || fell) {
+    if (spike || boulderHit || fireHit || enemyHit || fell) {
       handleHazard()
     }
 
@@ -172,10 +193,13 @@ const loop = new GameLoop({
 
     level.draw(ctx)
     level.bouncePads.forEach((pad) => drawBouncePad(ctx, pad, elapsed))
+    level.boulders.forEach((boulder) => drawBoulder(ctx, boulder))
+    level.fireBars.forEach((bar) => drawFireBar(ctx, bar))
     level.coins.forEach((coin) => {
       if (coin.collected) return
       drawCoin(ctx, coin, elapsed)
     })
+    level.enemies.forEach((enemy) => drawEnemy(ctx, enemy))
     drawPlayer(ctx, player, elapsed)
 
     ctx.restore()
@@ -190,8 +214,7 @@ loop.start()
 
 function beginRun() {
   state.startRun()
-  level.resetCoins()
-  level.resetBouncePads()
+  level.resetRunState()
   player.reset(level.spawnPoint)
   snapCamera()
 }
@@ -199,6 +222,8 @@ function beginRun() {
 function handleHazard() {
   sound.hit()
   state.hitHazard()
+  level.resetDynamics()
+  level.resetBouncePads()
   player.reset()
   snapCamera()
 }
