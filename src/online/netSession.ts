@@ -47,7 +47,7 @@ export class RemoteInputAdapter {
   }
 }
 
-const CONNECTION_TIMEOUT_MS = 15000 // 15 seconds
+const CONNECTION_TIMEOUT_MS = 30000 // 30 seconds for guests
 const POLLING_INTERVAL_MS = 700
 const STATE_SEND_INTERVAL_S = 0.1
 
@@ -131,7 +131,11 @@ export class NetSession {
           err instanceof Error ? err : new Error('Signal error'),
         )
       }
-      if (!this.connected && Date.now() - startTime > CONNECTION_TIMEOUT_MS) {
+      if (
+        !this.connected &&
+        this.mode === 'online-guest' &&
+        Date.now() - startTime > CONNECTION_TIMEOUT_MS
+      ) {
         this.events.onError?.(new Error('Connection timeout'))
         this.polling = false
         break

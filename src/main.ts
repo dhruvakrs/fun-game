@@ -372,6 +372,9 @@ function startOnlineHost() {
   remoteInputProfile = netSession.remoteInput.toProfile()
   setupPlayers(getPlayerTwoProfile())
   beginRun(true)
+  if (activeRoomCode) {
+    window.alert(`Room code: ${activeRoomCode}\nShare this with your guest.`)
+  }
   void netSession
     .startHost()
     .catch(
