@@ -47,6 +47,10 @@ export class RemoteInputAdapter {
   }
 }
 
+const CONNECTION_TIMEOUT_MS = 15000 // 15 seconds
+const POLLING_INTERVAL_MS = 700
+const STATE_SEND_INTERVAL_S = 0.1
+
 export class NetSession {
   private pc: RTCPeerConnection | null = null
   private dc: RTCDataChannel | null = null
@@ -97,7 +101,7 @@ export class NetSession {
   tickHost(delta: number, stateFactory: () => NetworkState) {
     if (!this.connected || !this.dc || this.dc.readyState !== 'open') return
     this.stateSendTimer += delta
-    if (this.stateSendTimer > 0.1) {
+    if (this.stateSendTimer > STATE_SEND_INTERVAL_S) {
       this.stateSendTimer = 0
       this.send({ type: 'state', payload: stateFactory() })
     }
@@ -115,6 +119,7 @@ export class NetSession {
   private async startPolling() {
     if (this.polling) return
     this.polling = true
+    const startTime = Date.now()
     while (this.polling) {
       try {
         const messages = await this.signal.fetchMessages()
@@ -126,7 +131,12 @@ export class NetSession {
           err instanceof Error ? err : new Error('Signal error'),
         )
       }
-      await wait(700)
+      if (!this.connected && Date.now() - startTime > CONNECTION_TIMEOUT_MS) {
+        this.events.onError?.(new Error('Connection timeout'))
+        this.polling = false
+        break
+      }
+      await wait(POLLING_INTERVAL_MS)
     }
   }
 
