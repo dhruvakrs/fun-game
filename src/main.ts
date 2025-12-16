@@ -6,7 +6,9 @@ import { Input } from './engine/input'
 import { GameState } from './game/gameState'
 import { Level } from './game/level'
 import { Player } from './game/entities/player'
+import { GameConfig } from './game/config'
 import { drawPlayer } from './game/render/playerSprite'
+import { UIManager } from './game/ui/uiManager'
 
 class SoundFX {
   private ctx: AudioContext | null = null
@@ -81,11 +83,13 @@ const player = new Player(level.spawnPoint)
 const camera = new Camera(canvas.width, level.width)
 const state = new GameState()
 const sound = new SoundFX()
+const ui = new UIManager()
 let elapsed = 0
 
 const loop = new GameLoop({
   update: (delta) => {
     elapsed += delta
+    ui.update(delta)
 
     const pressedStart = input.consumePress('start')
     const pressedRestart = input.consumePress('restart')
@@ -119,6 +123,11 @@ const loop = new GameLoop({
       if (intersects(player.body, coin)) {
         coin.collected = true
         state.addCoin()
+        ui.addScorePop(
+          coin.x + coin.width / 2,
+          coin.y,
+          GameConfig.coinValue,
+        )
         sound.coin()
       }
     })
@@ -142,8 +151,9 @@ const loop = new GameLoop({
 
     ctx.restore()
 
-    drawHud()
-    drawStatusOverlay()
+    ui.renderScorePops(ctx, camera.x)
+    ui.renderHud(ctx, state, elapsed)
+    ui.renderScreens(ctx, state, elapsed)
   },
 })
 
@@ -170,49 +180,4 @@ function snapCamera() {
     Math.min(level.width - canvas.width, centerX - canvas.width / 2),
   )
   camera.x = clamped
-}
-
-function drawHud() {
-  ctx.save()
-  ctx.fillStyle = 'rgba(12, 18, 40, 0.75)'
-  ctx.fillRect(12, 12, 232, 84)
-
-  ctx.fillStyle = '#9efcff'
-  ctx.font = '18px "Segoe UI", sans-serif'
-  ctx.textAlign = 'left'
-  ctx.fillText(`Score: ${state.score}`, 24, 40)
-  ctx.fillText(`Coins: ${state.coins}`, 24, 62)
-  ctx.fillText(`Lives: ${state.lives}`, 24, 84)
-  ctx.restore()
-}
-
-function drawStatusOverlay() {
-  if (state.status === 'playing') return
-
-  ctx.save()
-  ctx.fillStyle = 'rgba(6, 10, 20, 0.8)'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-  const centerX = canvas.width / 2
-  const centerY = canvas.height / 2
-  let title = ''
-  let subtitle = 'Arrow/A/D to move · Space to jump'
-
-  if (state.status === 'start') {
-    title = 'Press Enter to Start'
-    subtitle = 'Collect coins, avoid spikes, and reach the flag'
-  } else if (state.status === 'game-over') {
-    title = 'Game Over – Press R to Restart'
-  } else if (state.status === 'complete') {
-    title = 'Level Complete!'
-    subtitle = 'Press R to Restart'
-  }
-
-  ctx.fillStyle = '#e0e9ff'
-  ctx.textAlign = 'center'
-  ctx.font = '32px "Segoe UI", sans-serif'
-  ctx.fillText(title, centerX, centerY - 8)
-  ctx.font = '18px "Segoe UI", sans-serif'
-  ctx.fillText(subtitle, centerX, centerY + 24)
-  ctx.restore()
 }
