@@ -1,24 +1,27 @@
-type Action = 'left' | 'right' | 'jump' | 'start' | 'restart'
+export type Action = 'left' | 'right' | 'jump' | 'start' | 'restart' | 'action'
 
-const keyBindings: Record<string, Action> = {
-  ArrowLeft: 'left',
-  ArrowRight: 'right',
-  a: 'left',
-  d: 'right',
-  A: 'left',
-  D: 'right',
-  ' ': 'jump',
-  Spacebar: 'jump',
-  Enter: 'start',
-  e: 'start',
-  E: 'start',
-  r: 'restart',
-  R: 'restart',
+export type ControlScheme = {
+  left: string[]
+  right: string[]
+  jump: string[]
+  action?: string[]
+}
+
+export type InputProfile = {
+  isHeld: (action: Action) => boolean
+  consumePress: (action: Action) => boolean
 }
 
 export class Input {
-  private held = new Set<Action>()
-  private pressed = new Set<Action>()
+  private heldKeys = new Set<string>()
+  private pressedKeys = new Set<string>()
+
+  registerProfile(scheme: ControlScheme): InputProfile {
+    return {
+      isHeld: (action) => this.isActionHeld(action, scheme),
+      consumePress: (action) => this.consumeActionPress(action, scheme),
+    }
+  }
 
   constructor() {
     window.addEventListener('keydown', this.onKeyDown)
@@ -31,30 +34,57 @@ export class Input {
   }
 
   isHeld(action: Action) {
-    return this.held.has(action)
+    return this.heldKeys.has(action)
   }
 
   consumePress(action: Action) {
-    if (this.pressed.has(action)) {
-      this.pressed.delete(action)
+    if (this.pressedKeys.has(action)) {
+      this.pressedKeys.delete(action)
       return true
     }
     return false
   }
 
-  private onKeyDown = (event: KeyboardEvent) => {
-    const action = keyBindings[event.key]
-    if (!action) return
-    this.held.add(action)
-    this.pressed.add(action)
-    if (['ArrowLeft', 'ArrowRight', ' ', 'Spacebar'].includes(event.key)) {
-      event.preventDefault()
+  private isActionHeld(action: Action, scheme: ControlScheme) {
+    const keys = this.keysForAction(action, scheme)
+    return keys.some((key) => this.heldKeys.has(key))
+  }
+
+  private consumeActionPress(action: Action, scheme: ControlScheme) {
+    const keys = this.keysForAction(action, scheme)
+    const hit = keys.some((key) => this.pressedKeys.has(key))
+    if (hit) {
+      keys.forEach((key) => this.pressedKeys.delete(key))
     }
+    return hit
+  }
+
+  private keysForAction(action: Action, scheme: ControlScheme) {
+    if (action === 'left') return scheme.left
+    if (action === 'right') return scheme.right
+    if (action === 'jump') return scheme.jump
+    if (action === 'action') return scheme.action ?? []
+    return []
+  }
+
+  private onKeyDown = (event: KeyboardEvent) => {
+    this.heldKeys.add(event.code)
+    this.pressedKeys.add(event.code)
   }
 
   private onKeyUp = (event: KeyboardEvent) => {
-    const action = keyBindings[event.key]
-    if (!action) return
-    this.held.delete(action)
+    this.heldKeys.delete(event.code)
+  }
+
+  consumeKey(code: string) {
+    if (this.pressedKeys.has(code)) {
+      this.pressedKeys.delete(code)
+      return true
+    }
+    return false
+  }
+
+  isKeyHeld(code: string) {
+    return this.heldKeys.has(code)
   }
 }

@@ -1,8 +1,8 @@
 import './style.css'
-import { Camera } from './engine/camera'
+import { MultiCamera } from './engine/multiCamera'
 import { intersects } from './engine/collision'
 import { GameLoop } from './engine/gameLoop'
-import { Input } from './engine/input'
+import { Input, type ControlScheme, type InputProfile } from './engine/input'
 import { GameState } from './game/gameState'
 import { Level } from './game/level'
 import { Player } from './game/entities/player'
@@ -13,10 +13,7 @@ import { drawBouncePad } from './game/render/bouncePad'
 import { tickBouncePads } from './game/entities/bouncePad'
 import { drawBoulder, drawFireBar } from './game/render/obstacles'
 import { drawEnemy } from './game/render/enemies'
-import {
-  updateBoulders,
-  updateFireBars,
-} from './game/entities/obstacles'
+import { updateBoulders, updateFireBars } from './game/entities/obstacles'
 import { updateEnemies } from './game/entities/enemies'
 import { LEVELS } from './game/levels'
 import { UIManager } from './game/ui/uiManager'
@@ -96,12 +93,34 @@ const input = new Input()
 const levelDefs = LEVELS
 let currentLevelIndex = 0
 let level = new Level(levelDefs[currentLevelIndex])
-let player = new Player(level.spawnPoint)
-let camera = new Camera(canvas.width, level.width)
+const PLAYER_COUNT = 2
+const controlSchemes: ControlScheme[] = [
+  {
+    left: ['KeyA', 'ArrowLeft'],
+    right: ['KeyD', 'ArrowRight'],
+    jump: ['Space', 'ArrowUp', 'KeyW'],
+  },
+  {
+    left: ['Numpad4', 'KeyJ'],
+    right: ['Numpad6', 'KeyL'],
+    jump: ['Numpad8', 'Numpad5', 'KeyI'],
+  },
+]
+
+type PlayerSlot = {
+  entity: Player
+  input: InputProfile
+  reachedGoal: boolean
+}
+
+let players: PlayerSlot[] = []
+let camera = new MultiCamera(canvas.width, level.width)
 const state = new GameState()
 const sound = new SoundFX()
 const ui = new UIManager()
 let elapsed = 0
+
+setupPlayers()
 
 const loop = new GameLoop({
   update: (delta) => {
@@ -109,8 +128,9 @@ const loop = new GameLoop({
     ui.update(delta)
     tickBouncePads(level.bouncePads, delta)
 
-    const pressedStart = input.consumePress('start')
-    const pressedRestart = input.consumePress('restart')
+    const pressedStart =
+      input.consumeKey('Enter') || input.consumeKey('NumpadEnter')
+    const pressedRestart = input.consumeKey('KeyR')
 
     if (pressedRestart) {
       switchLevel(currentLevelIndex, true)
@@ -137,67 +157,100 @@ const loop = new GameLoop({
       return
     }
 
-    player.update(delta, input, level.solids)
+    players.forEach((slot, index) => {
+      if (!slot.entity.active || state.livesLeft(index) <= 0) {
+        slot.entity.active = false
+        return
+      }
 
-    const bouncePad = level.bouncePads.find(
-      (pad) =>
-        pad.cooldown <= 0 &&
-        intersects(player.body, pad) &&
-        player.body.y + player.body.height <= pad.y + pad.height + 4,
-    )
-    if (bouncePad) {
-      const strength =
-        GameConfig.bounceStrength *
-        (bouncePad.squash > 0 ? GameConfig.bounceDamping : 1)
-      player.applyBounce(strength)
-      bouncePad.squash = 1
-      bouncePad.cooldown = 0.12
-      sound.bounce()
-    }
+      slot.entity.update(delta, slot.input, level.solids)
+
+      const bouncePad = level.bouncePads.find(
+        (pad) =>
+          pad.cooldown <= 0 &&
+          intersects(slot.entity.body, pad) &&
+          slot.entity.body.y + slot.entity.body.height <=
+            pad.y + pad.height + 4,
+      )
+      if (bouncePad) {
+        const strength =
+          GameConfig.bounceStrength *
+          (bouncePad.squash > 0 ? GameConfig.bounceDamping : 1)
+        slot.entity.applyBounce(strength)
+        bouncePad.squash = 1
+        bouncePad.cooldown = 0.12
+        sound.bounce()
+      }
+    })
 
     updateBoulders(level.boulders, delta)
     updateFireBars(level.fireBars, delta)
     updateEnemies(level.enemies, delta)
 
-    const spike = level.hazards.some((hazard) => intersects(player.body, hazard))
-    const boulderHit = level.boulders.some((boulder) =>
-      intersects(player.body, boulder),
-    )
-    const fireHit = level.hitsFireBar(player.body)
-    const enemyHit = level.enemies.some((enemy) =>
-      intersects(player.body, enemy.body),
-    )
-    const fell = player.body.y > level.height + 200
-    if (spike || boulderHit || fireHit || enemyHit || fell) {
-      handleHazard()
-    }
+    players.forEach((slot, index) => {
+      if (!slot.entity.active || state.livesLeft(index) <= 0) return
 
-    level.coins.forEach((coin) => {
-      if (coin.collected) return
-      if (intersects(player.body, coin)) {
-        coin.collected = true
-        state.addCoin()
-        ui.addScorePop(
-          coin.x + coin.width / 2,
-          coin.y,
-          GameConfig.coinValue,
-        )
-        sound.coin()
+      const spike = level.hazards.some((hazard) =>
+        intersects(slot.entity.body, hazard),
+      )
+      const boulderHit = level.boulders.some((boulder) =>
+        intersects(slot.entity.body, boulder),
+      )
+      const fireHit = level.hitsFireBar(slot.entity.body)
+      const enemyHit = level.enemies.some((enemy) =>
+        intersects(slot.entity.body, enemy.body),
+      )
+      const fell = slot.entity.body.y > level.height + 200
+      if (spike || boulderHit || fireHit || enemyHit || fell) {
+        handleHazard(index)
+      }
+
+      level.coins.forEach((coin) => {
+        if (coin.collected) return
+        if (intersects(slot.entity.body, coin)) {
+          coin.collected = true
+          state.addCoin()
+          ui.addScorePop(
+            coin.x + coin.width / 2,
+            coin.y,
+            GameConfig.coinValue,
+          )
+          sound.coin()
+        }
+      })
+
+      if (level.goal && intersects(slot.entity.body, level.goal)) {
+        slot.reachedGoal = true
       }
     })
 
-    if (level.goal && intersects(player.body, level.goal)) {
+    if (state.status !== 'playing') {
+      return
+    }
+
+    const activePlayers = players.filter(
+      (_slot, idx) => state.livesLeft(idx) > 0 && _slot.entity.active,
+    )
+    camera.follow(
+      activePlayers.map((slot) => slot.entity.body),
+      delta,
+    )
+
+    const allReached =
+      activePlayers.length > 0 &&
+      activePlayers.every((slot) => slot.reachedGoal)
+    if (state.status === 'playing' && allReached) {
       state.completeLevel()
       sound.win()
     }
 
-    camera.follow(player.body.x + player.body.width / 2, delta)
   },
   render: () => {
     ctx.fillStyle = '#060a18'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
     ctx.save()
+    ctx.scale(camera.scale, camera.scale)
     ctx.translate(-camera.x, 0)
 
     level.draw(ctx)
@@ -209,53 +262,71 @@ const loop = new GameLoop({
       drawCoin(ctx, coin, elapsed)
     })
     level.enemies.forEach((enemy) => drawEnemy(ctx, enemy))
-    drawPlayer(ctx, player, elapsed)
+    players.forEach((slot) => {
+      if (slot.entity.active && state.status !== 'game-over') {
+        drawPlayer(ctx, slot.entity, elapsed)
+      }
+    })
 
     ctx.restore()
 
     ui.renderScorePops(ctx, camera.x)
-    ui.renderHud(ctx, state, elapsed, `Level ${state.level}: ${level.name}`)
+    ui.renderHud(
+      ctx,
+      state,
+      elapsed,
+      `Level ${state.level}: ${level.name}`,
+    )
     ui.renderScreens(ctx, state, elapsed, level.name, getNextLevelName())
   },
 })
 
 loop.start()
 
+function setupPlayers() {
+  const spawns = level.getSpawnPoints()
+  players = spawns.slice(0, PLAYER_COUNT).map((spawn, idx) => ({
+    entity: new Player(idx + 1, spawn),
+    input: input.registerProfile(controlSchemes[idx]),
+    reachedGoal: false,
+  }))
+}
+
 function beginRun(resetStats: boolean) {
   if (resetStats) {
-    state.startRun(currentLevelIndex)
+    state.startRun(currentLevelIndex, PLAYER_COUNT)
   } else {
-    state.continueRun(currentLevelIndex)
+    state.continueRun(currentLevelIndex, PLAYER_COUNT)
   }
   level.resetRunState()
-  player.reset(level.spawnPoint)
-  snapCamera()
+  players.forEach((slot, idx) => {
+    slot.entity.reset(level.getSpawnPoints()[idx] ?? level.spawnPoint)
+    slot.entity.active = true
+    slot.reachedGoal = false
+  })
+  camera = new MultiCamera(canvas.width, level.width)
 }
 
 function switchLevel(index: number, resetStats: boolean) {
   currentLevelIndex = index
   level = new Level(levelDefs[currentLevelIndex])
-  player = new Player(level.spawnPoint)
-  camera = new Camera(canvas.width, level.width)
+  setupPlayers()
   beginRun(resetStats)
 }
 
-function handleHazard() {
+function handleHazard(playerIndex: number) {
   sound.hit()
-  state.hitHazard()
+  state.loseLife(playerIndex)
   level.resetDynamics()
-  level.resetBouncePads()
-  player.reset()
-  snapCamera()
-}
-
-function snapCamera() {
-  const centerX = player.body.x + player.body.width / 2
-  const clamped = Math.max(
-    0,
-    Math.min(level.width - canvas.width, centerX - canvas.width / 2),
-  )
-  camera.x = clamped
+  const livesLeft = state.livesLeft(playerIndex)
+  const slot = players[playerIndex]
+  slot.reachedGoal = false
+  if (livesLeft > 0) {
+    slot.entity.reset(level.getSpawnPoints()[playerIndex] ?? level.spawnPoint)
+    slot.entity.active = true
+  } else {
+    slot.entity.active = false
+  }
 }
 
 function getNextLevelName() {

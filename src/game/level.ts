@@ -35,6 +35,7 @@ export class Level {
   enemies: Enemy[] = []
   goal: Goal | null = null
   spawnPoint = { x: TILE_SIZE * 2, y: TILE_SIZE * 10 }
+  spawnPointP2: { x: number; y: number } | null = null
   private definition: LevelDefinition
 
   private rows: string[]
@@ -70,6 +71,8 @@ export class Level {
           this.solids.push(tile)
         } else if (symbol === 'P') {
           this.spawnPoint = { x: worldX, y: worldY - 8 }
+        } else if (symbol === '2') {
+          this.spawnPointP2 = { x: worldX, y: worldY - 8 }
         } else if (symbol === 'C') {
           const padding = 8
           this.coins.push({
@@ -140,6 +143,14 @@ export class Level {
     this.resetCoins()
     this.resetBouncePads()
     this.resetDynamics()
+  }
+
+  getSpawnPoints() {
+    if (this.spawnPointP2) {
+      return [this.spawnPoint, this.spawnPointP2]
+    }
+    const offset = { x: this.spawnPoint.x + TILE_SIZE, y: this.spawnPoint.y }
+    return [this.spawnPoint, offset]
   }
 
   draw(ctx: CanvasRenderingContext2D) {

@@ -1,9 +1,10 @@
 import { moveWithCollisions } from '../../engine/collision'
-import type { Input } from '../../engine/input'
+import type { InputProfile } from '../../engine/input'
 import { GameConfig } from '../config'
 import type { DynamicBody, Rect } from './types'
 
 export class Player {
+  id: number
   body: DynamicBody
   onGround = false
   facing: 1 | -1 = 1
@@ -11,8 +12,10 @@ export class Player {
   private coyoteTimer = 0
   private jumpBufferTimer = 0
   private jumpHoldTimer = 0
+  active = true
 
-  constructor(spawn: { x: number; y: number }) {
+  constructor(id: number, spawn: { x: number; y: number }) {
+    this.id = id
     this.spawn = { ...spawn }
     this.body = {
       x: spawn.x,
@@ -35,7 +38,8 @@ export class Player {
     this.jumpHoldTimer = 0
   }
 
-  update(delta: number, input: Input, solids: Rect[]) {
+  update(delta: number, input: InputProfile, solids: Rect[]) {
+    if (!this.active) return
     this.coyoteTimer = Math.max(0, this.coyoteTimer - delta)
     this.jumpBufferTimer = Math.max(0, this.jumpBufferTimer - delta)
 

@@ -14,4 +14,7 @@ export const GameConfig = {
   coinFlashSpeed: 2.2,
   runAnimSpeed: 10,
   idleBlinkSpeed: 3.5,
+  cameraPadding: 140,
+  cameraMinScale: 0.75,
+  cameraMaxScale: 1,
 }

@@ -48,7 +48,7 @@ export function drawHud(
   drawStat(
     ctx,
     'Lives',
-    `${state.lives}`,
+    `P1:${state.lives[0] ?? 0}  P2:${state.lives[1] ?? 0}`,
     x + padding + panelWidth * 2,
     baseY,
   )
