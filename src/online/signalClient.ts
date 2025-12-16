@@ -6,11 +6,15 @@ type SignalPostBody = {
 }
 
 export class SignalClient {
-  constructor(
-    private room: string,
-    private peerId: string,
-    private baseUrl = '/api/signal',
-  ) {}
+  private room: string
+  private peerId: string
+  private baseUrl: string
+
+  constructor(room: string, peerId: string, baseUrl = '/api/signal') {
+    this.room = room
+    this.peerId = peerId
+    this.baseUrl = baseUrl
+  }
 
   async post(message: SignalPostBody) {
     await fetch(this.baseUrl, {

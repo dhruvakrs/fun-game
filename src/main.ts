@@ -3,7 +3,7 @@ import { intersects } from './engine/collision'
 import { GameLoop } from './engine/gameLoop'
 import { MultiCamera } from './engine/multiCamera'
 import { Input, type ControlScheme, type InputProfile } from './engine/input'
-import { GameState } from './game/gameState'
+import { GameState, type GameStatus } from './game/gameState'
 import { Level } from './game/level'
 import { Player } from './game/entities/player'
 import { GameConfig } from './game/config'
@@ -124,8 +124,9 @@ const ui = new UIManager()
 let elapsed = 0
 let sessionMode: SessionMode = 'local'
 let netSession: NetSession | null = null
-let remoteState: NetworkState | null = null
 let connectionInfo = 'Local co-op'
+let remoteInputProfile: InputProfile | null = null
+let activeRoomCode: string | null = null
 const peerId =
   (typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
@@ -138,7 +139,10 @@ const loop = new GameLoop({
   update: (delta) => {
     elapsed += delta
     ui.update(delta)
-    tickBouncePads(level.bouncePads, delta)
+    const isGuest = sessionMode === 'online-guest'
+    if (!isGuest) {
+      tickBouncePads(level.bouncePads, delta)
+    }
 
     const pressedStart =
       input.consumeKey('Enter') || input.consumeKey('NumpadEnter')
@@ -147,8 +151,9 @@ const loop = new GameLoop({
     const chooseHost = input.consumeKey('KeyH') || input.consumeKey('Digit2')
     const chooseJoin = input.consumeKey('KeyJ') || input.consumeKey('Digit3')
 
-    if (pressedRestart) {
+    if (pressedRestart && !isGuest) {
       switchLevel(currentLevelIndex, true)
+      pushHostState(delta)
       return
     }
 
@@ -167,15 +172,23 @@ const loop = new GameLoop({
     }
 
     if (state.status === 'complete') {
-      if (pressedStart) {
+      if (pressedStart && !isGuest) {
         const hasNext = currentLevelIndex < levelDefs.length - 1
         const nextIndex = hasNext ? currentLevelIndex + 1 : 0
         switchLevel(nextIndex, !hasNext)
       }
+      pushHostState(delta)
       return
     }
 
     if (state.status !== 'playing') {
+      pushHostState(delta)
+      return
+    }
+
+    if (isGuest) {
+      sendGuestInput()
+      followCamera(delta)
       return
     }
 
@@ -247,16 +260,14 @@ const loop = new GameLoop({
     })
 
     if (state.status !== 'playing') {
+      pushHostState(delta)
       return
     }
 
     const activePlayers = players.filter(
       (_slot, idx) => state.livesLeft(idx) > 0 && _slot.entity.active,
     )
-    camera.follow(
-      activePlayers.map((slot) => slot.entity.body),
-      delta,
-    )
+    followCamera(delta, activePlayers)
 
     const allReached =
       activePlayers.length > 0 &&
@@ -266,6 +277,7 @@ const loop = new GameLoop({
       sound.win()
     }
 
+    pushHostState(delta)
   },
   render: () => {
     ctx.fillStyle = '#060a18'
@@ -299,26 +311,235 @@ const loop = new GameLoop({
       elapsed,
       `Level ${state.level}: ${level.name}`,
     )
-    ui.renderScreens(ctx, state, elapsed, level.name, getNextLevelName())
+    ui.renderScreens(
+      ctx,
+      state,
+      elapsed,
+      level.name,
+      getNextLevelName(),
+      connectionInfo,
+    )
   },
 })
 
 loop.start()
 
-function setupPlayers() {
+function startLocal() {
+  sessionMode = 'local'
+  connectionInfo = 'Local co-op'
+  remoteInputProfile = null
+  activeRoomCode = null
+  netSession = null
+  setupPlayers()
+  beginRun(true)
+}
+
+function startOnlineHost() {
+  sessionMode = 'online-host'
+  activeRoomCode = createRoomCode()
+  connectionInfo = `Hosting room ${activeRoomCode}`
+  netSession = new NetSession(activeRoomCode, peerId, sessionMode, {
+    onConnected: () =>
+      (connectionInfo = `Guest connected · room ${activeRoomCode}`),
+    onState: (snapshot) => applyRemoteState(snapshot),
+    onError: (err) =>
+      (connectionInfo = `Connection error: ${err.message ?? 'unknown'}`),
+  })
+  remoteInputProfile = netSession.remoteInput.toProfile()
+  setupPlayers(getPlayerTwoProfile())
+  beginRun(true)
+  void netSession
+    .startHost()
+    .catch(
+      (err) =>
+        (connectionInfo = `Signal error: ${err instanceof Error ? err.message : String(err)}`),
+    )
+}
+
+function startOnlineGuest(roomCode: string) {
+  sessionMode = 'online-guest'
+  activeRoomCode = roomCode
+  connectionInfo = `Joining room ${roomCode}...`
+  netSession = new NetSession(roomCode, peerId, sessionMode, {
+    onConnected: () =>
+      (connectionInfo = `Connected to host · room ${roomCode}`),
+    onState: (snapshot) => applyRemoteState(snapshot),
+    onError: (err) =>
+      (connectionInfo = `Connection error: ${err.message ?? 'unknown'}`),
+  })
+  setupPlayers()
+  state.continueRun(currentLevelIndex, PLAYER_COUNT)
+  void netSession
+    .startGuest()
+    .catch(
+      (err) =>
+        (connectionInfo = `Join failed: ${err instanceof Error ? err.message : String(err)}`),
+    )
+}
+
+function sendGuestInput() {
+  if (!netSession) return
+  const payload = {
+    held: {
+      left: guestInputProfile.isHeld('left'),
+      right: guestInputProfile.isHeld('right'),
+      jump: guestInputProfile.isHeld('jump'),
+    },
+    pressedJump: guestInputProfile.consumePress('jump'),
+  }
+  netSession.sendInput(payload)
+}
+
+function followCamera(delta: number, activePlayers?: PlayerSlot[]) {
+  const targets =
+    activePlayers ??
+    players.filter(
+      (slot, idx) => state.livesLeft(idx) > 0 && slot.entity.active,
+    )
+  camera.follow(
+    targets.map((slot) => slot.entity.body),
+    delta,
+  )
+}
+
+function pushHostState(delta: number) {
+  if (sessionMode !== 'online-host' || !netSession) return
+  netSession.tickHost(delta, collectNetworkState)
+}
+
+function collectNetworkState(): NetworkState {
+  return {
+    players: players.map((slot, idx) => ({
+      x: slot.entity.body.x,
+      y: slot.entity.body.y,
+      vx: slot.entity.body.vx,
+      vy: slot.entity.body.vy,
+      onGround: slot.entity.onGround,
+      facing: slot.entity.facing,
+      lives: state.livesLeft(idx),
+      reachedGoal: slot.reachedGoal,
+    })),
+    coins: level.coins.map((coin) => coin.collected),
+    bouncePads: level.bouncePads.map((pad) => pad.squash),
+    boulders: level.boulders.map((boulder) => ({
+      x: boulder.x,
+      y: boulder.y,
+      rotation: boulder.rotation,
+    })),
+    fireBars: level.fireBars.map((bar) => ({ angle: bar.angle })),
+    enemies: level.enemies.map((enemy) => ({
+      x: enemy.body.x,
+      y: enemy.body.y,
+      type: enemy.type,
+      dir: enemy.dir,
+    })),
+    score: state.score,
+    coinsCount: state.coins,
+    levelIndex: currentLevelIndex,
+    status: state.status,
+  }
+}
+
+function applyRemoteState(snapshot: NetworkState) {
+  const levelChanged = snapshot.levelIndex !== currentLevelIndex
+  if (levelChanged) {
+    adoptRemoteLevel(snapshot.levelIndex)
+  }
+  state.status = snapshot.status as GameStatus
+  state.level = snapshot.levelIndex + 1
+  state.score = snapshot.score
+  state.coins = snapshot.coinsCount
+  state.lives = snapshot.players.map((p) => p.lives)
+
+  if (players.length !== snapshot.players.length) {
+    setupPlayers()
+  }
+
+  snapshot.players.forEach((remote, idx) => {
+    const slot = players[idx]
+    if (!slot) return
+    slot.entity.body.x = remote.x
+    slot.entity.body.y = remote.y
+    slot.entity.body.vx = remote.vx
+    slot.entity.body.vy = remote.vy
+    slot.entity.onGround = remote.onGround
+    slot.entity.facing = remote.facing
+    slot.entity.active = remote.lives > 0
+    slot.reachedGoal = remote.reachedGoal
+  })
+
+  level.coins.forEach((coin, idx) => {
+    coin.collected = snapshot.coins[idx] ?? coin.collected
+  })
+  level.bouncePads.forEach((pad, idx) => {
+    pad.squash = snapshot.bouncePads[idx] ?? pad.squash
+  })
+  level.boulders.forEach((boulder, idx) => {
+    const remote = snapshot.boulders[idx]
+    if (remote) {
+      boulder.x = remote.x
+      boulder.y = remote.y
+      boulder.rotation = remote.rotation
+    }
+  })
+  level.fireBars.forEach((bar, idx) => {
+    const remote = snapshot.fireBars[idx]
+    if (remote) {
+      bar.angle = remote.angle
+    }
+  })
+  level.enemies.forEach((enemy, idx) => {
+    const remote = snapshot.enemies[idx]
+    if (remote) {
+      enemy.body.x = remote.x
+      enemy.body.y = remote.y
+      enemy.dir = remote.dir
+    }
+  })
+  connectionInfo =
+    snapshot.status === 'complete'
+      ? 'Level complete (host)'
+      : `Online with host${activeRoomCode ? ` · room ${activeRoomCode}` : ''}`
+}
+
+function adoptRemoteLevel(index: number) {
+  currentLevelIndex = index
+  level = new Level(levelDefs[currentLevelIndex])
+  setupPlayers()
+  camera = new MultiCamera(canvas.width, level.width)
+}
+
+function getPlayerTwoProfile() {
+  if (sessionMode === 'online-host' && netSession) {
+    remoteInputProfile = netSession.remoteInput.toProfile()
+    return remoteInputProfile
+  }
+  return remoteInputProfile ?? input.registerProfile(controlSchemes[1])
+}
+
+function createRoomCode() {
+  return Math.random().toString(36).slice(2, 6).toUpperCase()
+}
+
+function setupPlayers(p2Input?: InputProfile) {
   const spawns = level.getSpawnPoints()
+  const profiles: InputProfile[] = [
+    input.registerProfile(controlSchemes[0]),
+    p2Input ?? input.registerProfile(controlSchemes[1]),
+  ]
   players = spawns.slice(0, PLAYER_COUNT).map((spawn, idx) => ({
     entity: new Player(idx + 1, spawn),
-    input: input.registerProfile(controlSchemes[idx]),
+    input: profiles[idx],
     reachedGoal: false,
   }))
 }
 
 function beginRun(resetStats: boolean) {
+  const playerCount = players.length || PLAYER_COUNT
   if (resetStats) {
-    state.startRun(currentLevelIndex, PLAYER_COUNT)
+    state.startRun(currentLevelIndex, playerCount)
   } else {
-    state.continueRun(currentLevelIndex, PLAYER_COUNT)
+    state.continueRun(currentLevelIndex, playerCount)
   }
   level.resetRunState()
   players.forEach((slot, idx) => {
@@ -332,7 +553,7 @@ function beginRun(resetStats: boolean) {
 function switchLevel(index: number, resetStats: boolean) {
   currentLevelIndex = index
   level = new Level(levelDefs[currentLevelIndex])
-  setupPlayers()
+  setupPlayers(getPlayerTwoProfile())
   beginRun(resetStats)
 }
 
