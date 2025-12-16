@@ -105,7 +105,7 @@ export default async function handler(req: Request): Promise<Response> {
 }
 
 export const config = {
-  runtime: 'nodejs',
+  runtime: 'edge',
   regions: ['iad1'],
 }
 
