@@ -78,10 +78,10 @@ canvas.height = 540
 canvas.className = 'game-canvas'
 app.appendChild(canvas)
 
+const overlayBaseText =
+  '1/Enter: Local · 2/H: Host Online · 3/J: Join Online · R: restart · Arrows/A/D move · Space jump'
 const overlay = document.createElement('div')
 overlay.className = 'overlay'
-overlay.innerText =
-  '1/Enter: Local · 2/H: Host Online · 3/J: Join Online · R: restart · Arrows/A/D move · Space jump'
 app.appendChild(overlay)
 
 const context = canvas.getContext('2d')
@@ -124,7 +124,6 @@ const ui = new UIManager()
 let elapsed = 0
 let sessionMode: SessionMode = 'local'
 let netSession: NetSession | null = null
-let connectionInfo = 'Local co-op'
 let remoteInputProfile: InputProfile | null = null
 let activeRoomCode: string | null = null
 let waitingForHost = false
@@ -133,6 +132,14 @@ const peerId =
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2, 10)).slice(0, 8)
 const guestInputProfile = input.registerProfile(controlSchemes[0])
+let connectionInfo = 'Local co-op'
+
+function setConnectionInfo(text: string) {
+  connectionInfo = text
+  overlay.innerText = `${overlayBaseText}\n${connectionInfo}`
+}
+
+setConnectionInfo(connectionInfo)
 
 setupPlayers()
 
@@ -341,7 +348,7 @@ loop.start()
 
 function startLocal() {
   sessionMode = 'local'
-  connectionInfo = 'Local co-op'
+  setConnectionInfo('Local co-op')
   waitingForHost = false
   remoteInputProfile = null
   activeRoomCode = null
@@ -353,14 +360,14 @@ function startLocal() {
 function startOnlineHost() {
   sessionMode = 'online-host'
   activeRoomCode = createRoomCode()
-  connectionInfo = `Hosting room ${activeRoomCode}`
+  setConnectionInfo(`Hosting room ${activeRoomCode}`)
   waitingForHost = false
   netSession = new NetSession(activeRoomCode, peerId, sessionMode, {
     onConnected: () =>
-      (connectionInfo = `Guest connected · room ${activeRoomCode}`),
+      setConnectionInfo(`Guest connected · room ${activeRoomCode}`),
     onState: (snapshot) => applyRemoteState(snapshot),
     onError: (err) =>
-      (connectionInfo = `Connection error: ${err.message ?? 'unknown'}`),
+      setConnectionInfo(`Connection error: ${err.message ?? 'unknown'}`),
   })
   remoteInputProfile = netSession.remoteInput.toProfile()
   setupPlayers(getPlayerTwoProfile())
@@ -369,7 +376,9 @@ function startOnlineHost() {
     .startHost()
     .catch(
       (err) =>
-        (connectionInfo = `Signal error: ${err instanceof Error ? err.message : String(err)}`),
+        setConnectionInfo(
+          `Signal error: ${err instanceof Error ? err.message : String(err)}`,
+        ),
     )
 }
 
@@ -377,13 +386,13 @@ function startOnlineGuest(roomCode: string) {
   sessionMode = 'online-guest'
   activeRoomCode = roomCode
   waitingForHost = true
-  connectionInfo = `Joining room ${roomCode}... (Esc to cancel)`
+  setConnectionInfo(`Joining room ${roomCode}... (Esc to cancel)`)
   netSession = new NetSession(roomCode, peerId, sessionMode, {
     onConnected: () =>
-      (connectionInfo = `Connected · waiting for host state (${roomCode})`),
+      setConnectionInfo(`Connected · waiting for host state (${roomCode})`),
     onState: (snapshot) => applyRemoteState(snapshot),
     onError: (err) =>
-      (connectionInfo = `Connection error: ${err.message ?? 'unknown'}`),
+      setConnectionInfo(`Connection error: ${err.message ?? 'unknown'}`),
   })
   setupPlayers()
   level.resetRunState()
@@ -393,7 +402,9 @@ function startOnlineGuest(roomCode: string) {
     .startGuest()
     .catch(
       (err) =>
-        (connectionInfo = `Join failed: ${err instanceof Error ? err.message : String(err)}`),
+        setConnectionInfo(
+          `Join failed: ${err instanceof Error ? err.message : String(err)}`,
+        ),
     )
 }
 
@@ -517,10 +528,11 @@ function applyRemoteState(snapshot: NetworkState) {
       enemy.dir = remote.dir
     }
   })
-  connectionInfo =
+  setConnectionInfo(
     snapshot.status === 'complete'
       ? 'Level complete (host)'
-      : `Online with host${activeRoomCode ? ` · room ${activeRoomCode}` : ''}`
+      : `Online with host${activeRoomCode ? ` · room ${activeRoomCode}` : ''}`,
+  )
 }
 
 function adoptRemoteLevel(index: number) {
