@@ -17,11 +17,14 @@ body {
 }
 
 #app {
+  position: relative;
   width: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 24px;
+  gap: 10px;
 }
 
 .game-canvas {
@@ -36,7 +39,11 @@ body {
 
 .overlay {
   position: absolute;
-  margin-top: 12px;
+  bottom: 12px;
+  left: 0;
+  right: 0;
+  text-align: center;
   color: #9fb7ff;
   font-weight: 600;
+  pointer-events: none;
 }
