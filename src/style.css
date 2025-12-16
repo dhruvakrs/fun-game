@@ -40,10 +40,16 @@ body {
 .overlay {
   position: absolute;
   bottom: 12px;
-  left: 0;
-  right: 0;
+  left: 50%;
+  transform: translateX(-50%);
   text-align: center;
   color: #9fb7ff;
   font-weight: 600;
+  font-size: 14px;
+  background: rgba(12, 18, 40, 0.7);
+  border: 1px solid #3fd2ff;
+  border-radius: 8px;
+  padding: 6px 12px;
   pointer-events: none;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
 }

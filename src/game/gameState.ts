@@ -1,12 +1,12 @@
 export type GameStatus = 'start' | 'playing' | 'game-over' | 'complete'
 
 export class GameState {
-  status: GameStatus = 'playing'
+  status: GameStatus = 'start'
   score = 0
   coins = 0
   lives = 3
 
-  resetSession() {
+  startRun() {
     this.status = 'playing'
     this.score = 0
     this.coins = 0
@@ -19,6 +19,7 @@ export class GameState {
   }
 
   hitHazard() {
+    if (this.status !== 'playing') return
     if (this.lives > 0) {
       this.lives -= 1
     }
@@ -28,6 +29,7 @@ export class GameState {
   }
 
   completeLevel() {
+    if (this.status !== 'playing') return
     this.status = 'complete'
     this.score += 500
   }
