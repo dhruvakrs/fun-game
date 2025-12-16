@@ -5,7 +5,8 @@ import { GameLoop } from './engine/gameLoop'
 import { Input } from './engine/input'
 import { GameState } from './game/gameState'
 import { Level } from './game/level'
-import { Player } from './game/player'
+import { Player } from './game/entities/player'
+import { drawPlayer } from './game/render/playerSprite'
 
 class SoundFX {
   private ctx: AudioContext | null = null
@@ -80,9 +81,12 @@ const player = new Player(level.spawnPoint)
 const camera = new Camera(canvas.width, level.width)
 const state = new GameState()
 const sound = new SoundFX()
+let elapsed = 0
 
 const loop = new GameLoop({
   update: (delta) => {
+    elapsed += delta
+
     const pressedStart = input.consumePress('start')
     const pressedRestart = input.consumePress('restart')
 
@@ -134,7 +138,7 @@ const loop = new GameLoop({
     ctx.translate(-camera.x, 0)
 
     level.draw(ctx)
-    player.draw(ctx)
+    drawPlayer(ctx, player, elapsed)
 
     ctx.restore()
 

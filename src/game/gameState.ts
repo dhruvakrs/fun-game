@@ -4,18 +4,18 @@ export class GameState {
   status: GameStatus = 'start'
   score = 0
   coins = 0
-  lives = 3
+  lives = GameConfig.startingLives
 
   startRun() {
     this.status = 'playing'
     this.score = 0
     this.coins = 0
-    this.lives = 3
+    this.lives = GameConfig.startingLives
   }
 
   addCoin() {
     this.coins += 1
-    this.score += 100
+    this.score += GameConfig.coinValue
   }
 
   hitHazard() {
@@ -31,6 +31,7 @@ export class GameState {
   completeLevel() {
     if (this.status !== 'playing') return
     this.status = 'complete'
-    this.score += 500
+    this.score += GameConfig.goalBonus
   }
 }
+import { GameConfig } from './config'

@@ -1,4 +1,4 @@
-import type { Coin, Goal, Hazard, Rect } from './entities'
+import type { Coin, Goal, Hazard, Rect } from './entities/types'
 
 type SolidTile = Rect & { kind: 'ground' | 'platform' }
 

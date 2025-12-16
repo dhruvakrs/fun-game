@@ -1,4 +1,4 @@
-import type { DynamicBody, Rect } from '../game/entities'
+import type { DynamicBody, Rect } from '../game/entities/types'
 
 export function intersects(a: Rect, b: Rect) {
   return (
