@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv'
+import { Redis } from '@upstash/redis'
 
 type SignalMessage = {
   room: string
@@ -9,6 +9,7 @@ type SignalMessage = {
 
 const ROOM_TTL_SECONDS = 60 * 30 // 30 minutes
 const MAX_MESSAGES = 128
+const redis = Redis.fromEnv()
 
 export default async function handler(req: Request): Promise<Response> {
   const corsHeaders = {
@@ -54,9 +55,9 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     // Append to the room list and keep it capped
-    await kv.rpush(roomKey(room), JSON.stringify(message))
-    await kv.ltrim(roomKey(room), -MAX_MESSAGES, -1)
-    await kv.expire(roomKey(room), ROOM_TTL_SECONDS)
+    await redis.rpush(roomKey(room), JSON.stringify(message))
+    await redis.ltrim(roomKey(room), -MAX_MESSAGES, -1)
+    await redis.expire(roomKey(room), ROOM_TTL_SECONDS)
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: corsHeaders,
@@ -64,8 +65,8 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   if (req.method === 'GET') {
-    const rawList = ((await kv.lrange(roomKey(room), 0, -1)) ??
-      []) as string[]
+    const rawList =
+      ((await redis.lrange<string>(roomKey(room), 0, -1)) ?? []) as string[]
     const parsed = rawList
       .map((item) => {
         try {
@@ -81,14 +82,14 @@ export default async function handler(req: Request): Promise<Response> {
     const remaining = parsed.filter((m) => m.from === peer)
 
     if (messages.length > 0 || remaining.length !== parsed.length) {
-      await kv.del(roomKey(room))
+      await redis.del(roomKey(room))
       if (remaining.length > 0) {
-        await kv.rpush(
+        await redis.rpush(
           roomKey(room),
           ...remaining.map((m) => JSON.stringify(m)),
         )
-        await kv.ltrim(roomKey(room), -MAX_MESSAGES, -1)
-        await kv.expire(roomKey(room), ROOM_TTL_SECONDS)
+        await redis.ltrim(roomKey(room), -MAX_MESSAGES, -1)
+        await redis.expire(roomKey(room), ROOM_TTL_SECONDS)
       }
     }
 
