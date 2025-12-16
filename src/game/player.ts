@@ -3,8 +3,8 @@ import type { Input } from '../engine/input'
 import type { DynamicBody, Rect } from './entities'
 
 const MOVE_SPEED = 260
-const JUMP_SPEED = 620
-const GRAVITY = 1700
+const JUMP_SPEED = 780
+const GRAVITY = 1650
 
 export class Player {
   body: DynamicBody
