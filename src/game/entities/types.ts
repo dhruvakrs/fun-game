@@ -17,3 +17,8 @@ export interface Coin extends Rect {
 export interface Hazard extends Rect {}
 
 export interface Goal extends Rect {}
+
+export interface BouncePad extends Rect {
+  squash: number
+  cooldown: number
+}

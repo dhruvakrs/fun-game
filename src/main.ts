@@ -9,6 +9,8 @@ import { Player } from './game/entities/player'
 import { GameConfig } from './game/config'
 import { drawPlayer } from './game/render/playerSprite'
 import { drawCoin } from './game/render/coinSprite'
+import { drawBouncePad } from './game/render/bouncePad'
+import { tickBouncePads } from './game/entities/bouncePad'
 import { UIManager } from './game/ui/uiManager'
 
 class SoundFX {
@@ -51,6 +53,10 @@ class SoundFX {
   win() {
     this.play(660, 0.35, 'triangle')
   }
+
+  bounce() {
+    this.play(520, 0.24, 'triangle')
+  }
 }
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -91,6 +97,7 @@ const loop = new GameLoop({
   update: (delta) => {
     elapsed += delta
     ui.update(delta)
+    tickBouncePads(level.bouncePads, delta)
 
     const pressedStart = input.consumePress('start')
     const pressedRestart = input.consumePress('restart')
@@ -112,6 +119,22 @@ const loop = new GameLoop({
     }
 
     player.update(delta, input, level.solids)
+
+    const bouncePad = level.bouncePads.find(
+      (pad) =>
+        pad.cooldown <= 0 &&
+        intersects(player.body, pad) &&
+        player.body.y + player.body.height <= pad.y + pad.height + 4,
+    )
+    if (bouncePad) {
+      const strength =
+        GameConfig.bounceStrength *
+        (bouncePad.squash > 0 ? GameConfig.bounceDamping : 1)
+      player.applyBounce(strength)
+      bouncePad.squash = 1
+      bouncePad.cooldown = 0.12
+      sound.bounce()
+    }
 
     const spike = level.hazards.some((hazard) => intersects(player.body, hazard))
     const fell = player.body.y > level.height + 200
@@ -148,6 +171,7 @@ const loop = new GameLoop({
     ctx.translate(-camera.x, 0)
 
     level.draw(ctx)
+    level.bouncePads.forEach((pad) => drawBouncePad(ctx, pad, elapsed))
     level.coins.forEach((coin) => {
       if (coin.collected) return
       drawCoin(ctx, coin, elapsed)
@@ -167,6 +191,7 @@ loop.start()
 function beginRun() {
   state.startRun()
   level.resetCoins()
+  level.resetBouncePads()
   player.reset(level.spawnPoint)
   snapCamera()
 }

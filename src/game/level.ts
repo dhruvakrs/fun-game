@@ -1,4 +1,4 @@
-import type { Coin, Goal, Hazard, Rect } from './entities/types'
+import type { BouncePad, Coin, Goal, Hazard, Rect } from './entities/types'
 
 type SolidTile = Rect & { kind: 'ground' | 'platform' }
 
@@ -36,9 +36,11 @@ const rows = rawRows.map((row, index) => {
 export class Level {
   readonly width = LEVEL_WIDTH * TILE_SIZE
   readonly height = rows.length * TILE_SIZE
-  readonly solids: SolidTile[] = []
+  readonly terrain: SolidTile[] = []
+  readonly solids: Rect[] = []
   readonly coins: Coin[] = []
   readonly hazards: Hazard[] = []
+  readonly bouncePads: BouncePad[] = []
   goal: Goal | null = null
   spawnPoint = { x: TILE_SIZE * 2, y: TILE_SIZE * 10 }
 
@@ -49,13 +51,16 @@ export class Level {
         const worldX = x * TILE_SIZE
         const worldY = y * TILE_SIZE
         if (symbol === '#' || symbol === '=') {
-          this.solids.push({
-            kind: symbol === '#' ? 'ground' : 'platform',
+          const kind: SolidTile['kind'] = symbol === '#' ? 'ground' : 'platform'
+          const tile: SolidTile = {
+            kind,
             x: worldX,
             y: worldY,
             width: TILE_SIZE,
             height: TILE_SIZE,
-          })
+          }
+          this.terrain.push(tile)
+          this.solids.push(tile)
         } else if (symbol === 'P') {
           this.spawnPoint = { x: worldX, y: worldY - 8 }
         } else if (symbol === 'C') {
@@ -74,6 +79,18 @@ export class Level {
             width: TILE_SIZE,
             height: TILE_SIZE,
           })
+        } else if (symbol === 'B') {
+          const padHeight = 18
+          const pad: BouncePad = {
+            x: worldX,
+            y: worldY + TILE_SIZE - padHeight,
+            width: TILE_SIZE,
+            height: padHeight,
+            squash: 0,
+            cooldown: 0,
+          }
+          this.bouncePads.push(pad)
+          this.solids.push(pad)
         } else if (symbol === 'G') {
           this.goal = {
             x: worldX + 8,
@@ -92,11 +109,18 @@ export class Level {
     })
   }
 
+  resetBouncePads() {
+    this.bouncePads.forEach((pad) => {
+      pad.squash = 0
+      pad.cooldown = 0
+    })
+  }
+
   draw(ctx: CanvasRenderingContext2D) {
     ctx.fillStyle = '#0e1936'
     ctx.fillRect(0, 0, this.width, this.height)
 
-    this.solids.forEach((solid) => {
+    this.terrain.forEach((solid) => {
       ctx.fillStyle = solid.kind === 'ground' ? '#22335a' : '#30467a'
       ctx.fillRect(solid.x, solid.y, solid.width, solid.height)
       ctx.fillStyle = '#11182b'
